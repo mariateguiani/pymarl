@@ -1,3 +1,14 @@
+# Implementing multi-agent safety challenges for SMAC
+
+To run the experiment to protect one unit (for QMIX):
+```shell
+python3 src/main.py --config=qmix --env-config=sc2_protect with env_args.map_name=2s3z
+```
+
+
+## Old README:
+
+
 ```diff
 - Please pay attention to the version of SC2 you are using for your experiments. 
 - Performance is *not* always comparable between versions. 
