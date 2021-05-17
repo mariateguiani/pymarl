@@ -1,12 +1,14 @@
 import copy
+import torch
+import torch.optim as optim
+
 from components.episode_buffer import EpisodeBatch
 from modules.critics.ippo import IPPOCritic
 from utils.rl_utils import build_td_lambda_targets
-import torch as th
-from torch.optim import RMSprop
+
 
 class IPPOLearner:
-    def __init__(self, mac, scheme, logger, args):
+    def __init__(self, mac, scheme, logger, args, critic=None):
         self.args = args
         self.n_agents = args.n_agents
         self.n_actions = args.n_actions
@@ -18,47 +20,51 @@ class IPPOLearner:
 
         self.log_stats_t = -self.args.learner_log_interval - 1
 
-        self.critic = IPPOCritic(scheme, args)
-        self.target_critic = copy.deepcopy(self.critic)
+        self.critic = IPPOCritic(scheme, args) if critic = None else critic
+        # self.target_critic = copy.deepcopy(self.critic)
 
         self.agent_params = list(mac.parameters())
         self.critic_params = list(self.critic.parameters())
         self.params = self.agent_params + self.critic_params
 
-        # self.agent_optimiser = RMSprop(params=self.agent_params, lr=args.lr, alpha=args.optim_alpha, eps=args.optim_eps)
-        # self.critic_optimiser = RMSprop(params=self.critic_params, lr=args.critic_lr, alpha=args.optim_alpha, eps=args.optim_eps)
+        self.agent_optimiser = RMSprop(params=self.agent_params, lr=args.lr, alpha=args.optim_alpha, eps=args.optim_eps)
+        self.critic_optimiser = RMSprop(params=self.critic_params, lr=args.critic_lr, alpha=args.optim_alpha, eps=args.optim_eps)
+
+        # Hyperparameters from IPPO paper
+        self.clip_param = 0.2 
+        self.value_loss_coef = 0.5
 
     def train(self, batch: EpisodeBatch, t_env: int, episode_num: int):
         # Get the relevant quantities
-        # bs = batch.batch_size
-        # max_t = batch.max_seq_length
-        # rewards = batch["reward"][:, :-1]
-        # actions = batch["actions"][:, :]
-        # terminated = batch["terminated"][:, :-1].float()
-        # mask = batch["filled"][:, :-1].float()
-        # mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
-        # avail_actions = batch["avail_actions"][:, :-1]
+        bs = batch.batch_size
+        max_t = batch.max_seq_length
+        rewards = batch["reward"][:, :-1]
+        actions = batch["actions"][:, :]
+        terminated = batch["terminated"][:, :-1].float()
+        mask = batch["filled"][:, :-1].float()
+        mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
+        avail_actions = batch["avail_actions"][:, :-1]
 
-        # critic_mask = mask.clone()
+        critic_mask = mask.clone()
 
-        # mask = mask.repeat(1, 1, self.n_agents).view(-1)
+        mask = mask.repeat(1, 1, self.n_agents).view(-1)
 
-        # q_vals, critic_train_stats = self._train_critic(batch, rewards, terminated, actions, avail_actions,
-        #                                                 critic_mask, bs, max_t)
+        q_vals, critic_train_stats = self._train_critic(batch, rewards, terminated, actions, avail_actions,
+                                                        critic_mask, bs, max_t)
 
-        # actions = actions[:,:-1]
+        actions = actions[:,:-1]
 
-        # mac_out = []
-        # self.mac.init_hidden(batch.batch_size)
-        # for t in range(batch.max_seq_length - 1):
-        #     agent_outs = self.mac.forward(batch, t=t)
-        #     mac_out.append(agent_outs)
-        # mac_out = th.stack(mac_out, dim=1)  # Concat over time
+        mac_out = []
+        self.mac.init_hidden(batch.batch_size)
+        for t in range(batch.max_seq_length - 1):
+            agent_outs = self.mac.forward(batch, t=t)
+            mac_out.append(agent_outs)
+        mac_out = th.stack(mac_out, dim=1)  # Concat over time
 
-        # # Mask out unavailable actions, renormalise (as in action selection)
-        # mac_out[avail_actions == 0] = 0
-        # mac_out = mac_out/mac_out.sum(dim=-1, keepdim=True)
-        # mac_out[avail_actions == 0] = 0
+        # Mask out unavailable actions, renormalise (as in action selection)
+        mac_out[avail_actions == 0] = 0
+        mac_out = mac_out/mac_out.sum(dim=-1, keepdim=True)
+        mac_out[avail_actions == 0] = 0
 
         # # Calculated baseline
         # q_vals = q_vals.reshape(-1, self.n_actions)
@@ -85,18 +91,19 @@ class IPPOLearner:
         #     self._update_targets()
         #     self.last_target_update_step = self.critic_training_steps
 
-        # if t_env - self.log_stats_t >= self.args.learner_log_interval:
-        #     ts_logged = len(critic_train_stats["critic_loss"])
-        #     for key in ["critic_loss", "critic_grad_norm", "td_error_abs", "q_taken_mean", "target_mean"]:
-        #         self.logger.log_stat(key, sum(critic_train_stats[key])/ts_logged, t_env)
+        if t_env - self.log_stats_t >= self.args.learner_log_interval:
+            ts_logged = len(critic_train_stats["critic_loss"])
+            for key in ["critic_loss", "critic_grad_norm", "td_error_abs", "q_taken_mean", "target_mean"]:
+                self.logger.log_stat(key, sum(critic_train_stats[key])/ts_logged, t_env)
 
-        #     self.logger.log_stat("advantage_mean", (advantages * mask).sum().item() / mask.sum().item(), t_env)
-        #     self.logger.log_stat("coma_loss", coma_loss.item(), t_env)
-        #     self.logger.log_stat("agent_grad_norm", grad_norm, t_env)
-        #     self.logger.log_stat("pi_max", (pi.max(dim=1)[0] * mask).sum().item() / mask.sum().item(), t_env)
-        #     self.log_stats_t = t_env
+            self.logger.log_stat("advantage_mean", (advantages * mask).sum().item() / mask.sum().item(), t_env)
+            self.logger.log_stat("coma_loss", coma_loss.item(), t_env)
+            self.logger.log_stat("agent_grad_norm", grad_norm, t_env)
+            self.logger.log_stat("pi_max", (pi.max(dim=1)[0] * mask).sum().item() / mask.sum().item(), t_env)
+            self.log_stats_t = t_env
 
     def _train_critic(self, batch, rewards, terminated, actions, avail_actions, mask, bs, max_t):
+        return
         # Optimise critic
         # target_q_vals = self.target_critic(batch)[:, :]
         # targets_taken = th.gather(target_q_vals, dim=3, index=actions).squeeze(3)
