@@ -30,9 +30,8 @@ env_args:
   heuristic_ai: False
   heuristic_rest: False
   debug: False
-  protect_unit: True  # Safety challenge - protect one unit
-  protect_random: False
-  protect_easy: True
+  prioritise_type: "zergling"  # Challenge - prioritise specific enemy type
+  prioritise_type_easy: True
 
 test_greedy: True
 test_nepisode: 32

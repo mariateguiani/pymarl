@@ -20,7 +20,7 @@ class IPPOLearner:
 
         self.log_stats_t = -self.args.learner_log_interval - 1
 
-        self.critic = IPPOCritic(scheme, args) if critic = None else critic
+        self.critic = IPPOCritic(scheme, args) if critic == None else critic
         # self.target_critic = copy.deepcopy(self.critic)
 
         self.agent_params = list(mac.parameters())
