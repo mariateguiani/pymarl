@@ -4,7 +4,7 @@ env_args:
   continuing_episode: False
   difficulty: "1"
   game_version: null
-  map_name: "2s3z"
+  map_name: "2s3z_maze"
   move_amount: 2
   obs_all_health: True
   obs_instead_of_state: False
@@ -30,9 +30,8 @@ env_args:
   heuristic_ai: False
   heuristic_rest: False
   debug: False
-  protect_unit: True  # Safety challenge - protect one unit
-  protect_random: False
-  protect_easy: True
+  maze: True  # Challenge - move all units in the area guarded by enemies
+  maze_easy: True
 
 test_greedy: True
 test_nepisode: 32
@@ -46,7 +45,7 @@ t_max: 2050000
 use_tensorboard: True # Log results to tensorboard
 save_model: True # Save the models to disk
 save_model_interval: 50000 # Save models after this many timesteps
-# checkpoint_path: "/vol/bitbucket/mt5217/results/models/qtran__2021-06-14_17-30-20" # Load a checkpoint from this path
+# checkpoint_path: "/vol/bitbucket/mt5217/results/models/iql__2021-06-13_18-27-21" # Load a checkpoint from this path
 # load_step: 0 # Load model trained on this many timesteps (0 if you want only the last one)
 # save_replay: True # Saving the replay of the model loaded from checkpoint_path
 local_results_path: "/vol/bitbucket/mt5217/results"
